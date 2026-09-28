@@ -1,0 +1,36 @@
+export type Role = 'FARMER' | 'OFFICIAL' | 'ADMIN';
+
+export const Role = {
+  FARMER: 'FARMER' as Role,
+  OFFICIAL: 'OFFICIAL' as Role,
+  ADMIN: 'ADMIN' as Role,
+};
+
+export const BookingStatus = {
+  BOOKED: 'BOOKED',
+  ARRIVED: 'ARRIVED',
+  WAITING: 'WAITING',
+  CALLED: 'CALLED',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  NO_SHOW: 'NO_SHOW',
+  CANCELLED: 'CANCELLED',
+};
+
+export const ProcurementStatus = {
+  PENDING: 'PENDING',
+  ARRIVED: 'ARRIVED',
+  INSPECTED: 'INSPECTED',
+  WEIGHED: 'WEIGHED',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  PAYMENT_PENDING: 'PAYMENT_PENDING',
+  PAID: 'PAID',
+};
+
+export const PaymentStatus = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  PAID: 'PAID',
+  FAILED: 'FAILED',
+};

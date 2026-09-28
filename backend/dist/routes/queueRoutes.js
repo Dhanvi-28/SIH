@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const queueController_1 = require("../controllers/queueController");
+const router = (0, express_1.Router)();
+router.get('/:token', queueController_1.getQueueByToken);
+router.post('/:token/arrive', queueController_1.markArrival);
+router.post('/:token/call', queueController_1.callFarmer);
+router.post('/:token/start', queueController_1.startProcessing);
+router.post('/:token/complete', queueController_1.completeQueue);
+router.post('/:token/no-show', queueController_1.markNoShow);
+exports.default = router;

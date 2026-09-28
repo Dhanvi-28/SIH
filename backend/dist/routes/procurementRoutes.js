@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const procurementController_1 = require("../controllers/procurementController");
+const auth_1 = require("../middleware/auth");
+const router = (0, express_1.Router)();
+router.get('/', auth_1.authenticateJwt, procurementController_1.getProcurements);
+router.get('/:id', auth_1.authenticateJwt, procurementController_1.getProcurementById);
+router.post('/:id/inspection', auth_1.authenticateJwt, procurementController_1.submitInspection);
+router.post('/:id/weigh', auth_1.authenticateJwt, procurementController_1.recordWeighing);
+router.post('/:id/accept', auth_1.authenticateJwt, procurementController_1.acceptProcurement);
+router.post('/:id/reject', auth_1.authenticateJwt, procurementController_1.rejectProcurement);
+exports.default = router;

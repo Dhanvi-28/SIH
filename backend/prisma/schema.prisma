@@ -1,0 +1,245 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String?  @unique
+  phone        String   @unique
+  passwordHash String
+  role         String   @default("FARMER") // FARMER, OFFICIAL, ADMIN
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  farmer        Farmer?
+  notifications Notification[]
+}
+
+model Farmer {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farmerCode        String   @unique
+  village           String
+  district          String
+  state             String
+  preferredLanguage String   @default("en")
+  createdAt         DateTime @default(now())
+
+  bookings Booking[]
+}
+
+model ProcurementCenter {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  name           String
+  address        String
+  village        String
+  district       String
+  state          String
+  latitude       Float?
+  longitude      Float?
+  dailyCapacity  Float    @default(1000.0) // Tons
+  activeCounters Int      @default(4)
+  status         String   @default("OPEN")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  centerProduces CenterProduce[]
+  schedules      ProcurementSchedule[]
+  bookings       Booking[]
+  predictions    Prediction[]
+  historicalData HistoricalProcessingRecord[]
+}
+
+model Produce {
+  id              String   @id @default(uuid())
+  name            String
+  code            String   @unique
+  unit            String   @default("Tons")
+  active          Boolean  @default(true)
+  baseRatePerUnit Float    @default(2300.0) // INR per Ton
+
+  centerProduces CenterProduce[]
+  schedules      ProcurementSchedule[]
+  bookings       Booking[]
+}
+
+model CenterProduce {
+  id               String            @id @default(uuid())
+  centerId         String
+  center           ProcurementCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  produceId        String
+  produce          Produce           @relation(fields: [produceId], references: [id], onDelete: Cascade)
+  maxDailyQuantity Float             @default(500.0)
+
+  @@unique([centerId, produceId])
+}
+
+model ProcurementSchedule {
+  id             String            @id @default(uuid())
+  centerId       String
+  center         ProcurementCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  produceId      String
+  produce        Produce           @relation(fields: [produceId], references: [id], onDelete: Cascade)
+  date           String            // YYYY-MM-DD
+  startTime      String            // HH:mm
+  endTime        String            // HH:mm
+  capacity       Float             @default(500.0)
+  bookedQuantity Float             @default(0.0)
+  status         String            @default("OPEN") // OPEN, FILLING_FAST, FULL, CLOSED
+
+  slots    Slot[]
+  bookings Booking[]
+}
+
+model Slot {
+  id             String              @id @default(uuid())
+  scheduleId     String
+  schedule       ProcurementSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  startTime      String              // HH:mm
+  endTime        String              // HH:mm
+  capacity       Float               @default(50.0)
+  bookedCount    Int                 @default(0)
+  bookedQuantity Float               @default(0.0)
+  status         String              @default("AVAILABLE")
+
+  bookings Booking[]
+}
+
+model Booking {
+  id          String            @id @default(uuid())
+  farmerId    String
+  farmer      Farmer            @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  centerId    String
+  center      ProcurementCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  produceId   String
+  produce     Produce           @relation(fields: [produceId], references: [id], onDelete: Cascade)
+  scheduleId  String
+  schedule    ProcurementSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  slotId      String
+  slot        Slot              @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  quantity    Float             // Tons
+  tokenNumber String            @unique // e.g. KPC-041
+  status      String            @default("BOOKED") // BOOKED, ARRIVED, WAITING, CALLED, PROCESSING, COMPLETED, NO_SHOW, CANCELLED
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  queueEntry  QueueEntry?
+  procurement Procurement?
+  predictions Prediction[]
+}
+
+model QueueEntry {
+  id                   String   @id @default(uuid())
+  bookingId            String   @unique
+  booking              Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  position             Int      @default(1)
+  status               String   @default("ARRIVED")
+  estimatedWaitMinutes Int      @default(30)
+  arrivedAt            DateTime?
+  calledAt             DateTime?
+  startedAt            DateTime?
+  completedAt          DateTime?
+}
+
+model Procurement {
+  id              String   @id @default(uuid())
+  bookingId       String   @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actualQuantity  Float?
+  status          String   @default("PENDING") // PENDING, ARRIVED, INSPECTED, WEIGHED, ACCEPTED, REJECTED, PAYMENT_PENDING, PAID
+  startedAt       DateTime?
+  completedAt     DateTime?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+
+  inspection Inspection?
+  weighing   Weighing?
+  payment    Payment?
+}
+
+model Inspection {
+  id              String      @id @default(uuid())
+  procurementId   String      @unique
+  procurement     Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  moisture        Float       // percentage e.g. 12.5
+  qualityGrade    String      // A, B, C, Standard
+  foreignMaterial Float       // percentage e.g. 1.2
+  visibleDamage   Float       // percentage e.g. 0.5
+  remarks         String?
+  result          String      // ACCEPT, REJECT
+  inspectedBy     String
+  inspectedAt     DateTime    @default(now())
+}
+
+model Weighing {
+  id               String      @id @default(uuid())
+  procurementId    String      @unique
+  procurement      Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  declaredQuantity Float
+  actualQuantity   Float
+  unit             String      @default("Tons")
+  remarks          String?
+  recordedBy       String
+  recordedAt       DateTime    @default(now())
+}
+
+model Payment {
+  id            String      @id @default(uuid())
+  procurementId String      @unique
+  procurement   Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  quantity      Float
+  rate          Float
+  grossAmount   Float
+  deductions    Float       @default(0.0)
+  netAmount     Float
+  status        String      @default("PENDING") // PENDING, PROCESSING, PAID, FAILED
+  reference     String      @unique
+  processedAt   DateTime?
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // SLOT_REMINDER, QUEUE_UPDATE, COUNTER_ALERT, DECISION, PAYMENT
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Prediction {
+  id               String            @id @default(uuid())
+  centerId         String
+  center           ProcurementCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  bookingId        String?
+  booking          Booking?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  predictedMinutes Int
+  minMinutes       Int
+  maxMinutes       Int
+  confidence       Float
+  factorsJson      String            // JSON string of factor breakdown
+  createdAt        DateTime          @default(now())
+}
+
+model HistoricalProcessingRecord {
+  id                       String            @id @default(uuid())
+  centerId                 String
+  center                   ProcurementCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  date                     String            // YYYY-MM-DD
+  hour                     Int               // 0-23
+  farmersCount             Int
+  totalQuantity            Float
+  activeCounters           Int
+  averageProcessingMinutes Float
+  averageWaitingMinutes    Float
+  completedCount           Int
+}
