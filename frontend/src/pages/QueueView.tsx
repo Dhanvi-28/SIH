@@ -12,6 +12,7 @@ export const QueueView: React.FC = () => {
   const { token } = useParams<{ token: string }>();
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   const tokenNum = token || 'KPC-041';
 
@@ -26,9 +27,16 @@ export const QueueView: React.FC = () => {
       const res = await api.get(`/queue/${tokenNum}`);
       if (res.data.success) {
         setQueueStatus(res.data.data);
+        setNotFound(false);
+      } else {
+        setQueueStatus(null);
+        setNotFound(true);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      if (e.response?.status === 404) {
+        setQueueStatus(null);
+        setNotFound(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -133,15 +141,36 @@ export const QueueView: React.FC = () => {
             minMinutes={queueStatus.minMinutes}
             maxMinutes={queueStatus.maxMinutes}
             confidence={queueStatus.confidence}
-            factors={queueStatus.factors}
+            factors={queueStatus.factors || []}
             activeCounters={queueStatus.activeCounters}
           />
 
           {/* Procurement Progress Timeline */}
           <ProcurementTimeline procurement={queueStatus.booking.procurement} />
         </div>
+      ) : notFound ? (
+        <div className="p-10 text-center bg-white rounded-3xl shadow-xl border border-slate-200">
+          <h3 className="text-lg font-extrabold text-slate-900">Token {tokenNum} not found</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            This token does not exist yet. Book a procurement slot to generate a new digital token.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to="/centers"
+              className="px-5 py-2.5 bg-forest-900 text-white font-extrabold text-xs rounded-xl shadow transition"
+            >
+              Browse Centers & Book Slot
+            </Link>
+            <Link
+              to="/procurement-timeline"
+              className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-sm transition"
+            >
+              View My Procurement Status
+            </Link>
+          </div>
+        </div>
       ) : (
-        <div className="p-8 text-center text-slate-500 bg-white rounded-3xl">Token not found</div>
+        <div className="p-8 text-center text-slate-500 bg-white rounded-3xl">Unable to load queue status.</div>
       )}
 
       <DemoToolbar onRefresh={fetchQueue} />

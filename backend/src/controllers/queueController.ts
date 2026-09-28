@@ -38,6 +38,18 @@ export async function markArrival(req: Request, res: Response) {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Token not found' } });
     }
 
+    // A booking that already finished (or was cancelled) must never re-enter the queue,
+    // otherwise re-marking arrival would regress a paid procurement back to ARRIVED.
+    if ([BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.NO_SHOW].includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_STATE',
+          message: `This booking is already ${booking.status.toLowerCase()} and cannot be marked as arrived.`,
+        },
+      });
+    }
+
     await prisma.booking.update({
       where: { id: booking.id },
       data: { status: BookingStatus.ARRIVED },
@@ -76,7 +88,8 @@ export async function markArrival(req: Request, res: Response) {
           status: ProcurementStatus.ARRIVED,
         },
       });
-    } else {
+    } else if (existingProc.status === ProcurementStatus.PENDING) {
+      // Only advance a procurement that has not progressed past arrival.
       await prisma.procurement.update({
         where: { id: existingProc.id },
         data: { status: ProcurementStatus.ARRIVED },

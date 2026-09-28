@@ -5,15 +5,22 @@ import { InspectionModal } from './InspectionModal';
 import { DemoToolbar } from '../components/DemoToolbar';
 import { Building2, Users, Scale, CheckCircle2, AlertTriangle, QrCode, Phone, FastForward, Play, RefreshCw, ShieldAlert } from 'lucide-react';
 import api from '../services/api';
-import { Procurement, Booking } from '../types';
+import { Procurement, Booking, ProcurementCenter } from '../types';
 
 export const OfficialDashboard: React.FC = () => {
   const [procurements, setProcurements] = useState<Procurement[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [centers, setCenters] = useState<ProcurementCenter[]>([]);
   const [verifyToken, setVerifyToken] = useState('KPC-041');
   const [activeModalProc, setActiveModalProc] = useState<Procurement | null>(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
+
+  // The busiest center drives the capacity monitor + bottleneck engine
+  const focusCenter =
+    centers
+      .slice()
+      .sort((a, b) => (b.currentQueue || 0) - (a.currentQueue || 0))[0] || centers[0];
 
   useEffect(() => {
     fetchOfficialData();
@@ -23,13 +30,15 @@ export const OfficialDashboard: React.FC = () => {
 
   const fetchOfficialData = async () => {
     try {
-      const [pRes, bRes] = await Promise.all([
+      const [pRes, bRes, cRes] = await Promise.all([
         api.get('/procurements'),
         api.get('/bookings'),
+        api.get('/centers'),
       ]);
 
       if (pRes.data.success) setProcurements(pRes.data.data);
       if (bRes.data.success) setBookings(bRes.data.data);
+      if (cRes.data.success) setCenters(cRes.data.data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -46,8 +55,9 @@ export const OfficialDashboard: React.FC = () => {
         fetchOfficialData();
         setTimeout(() => setMsg(''), 3000);
       }
-    } catch (e) {
-      setMsg('Error verifying token');
+    } catch (e: any) {
+      setMsg(e.response?.data?.error?.message || 'Error verifying token');
+      setTimeout(() => setMsg(''), 3000);
     }
   };
 
@@ -60,15 +70,33 @@ export const OfficialDashboard: React.FC = () => {
         fetchOfficialData();
         setTimeout(() => setMsg(''), 3000);
       }
-    } catch (e) {
-      setMsg('Error calling farmer');
+    } catch (e: any) {
+      setMsg(e.response?.data?.error?.message || 'Error calling farmer');
+      setTimeout(() => setMsg(''), 3000);
     }
   };
 
-  const completedCount = procurements.filter(p => p.status === 'PAID').length;
-  const pendingCount = procurements.filter(p => p.status !== 'PAID' && p.status !== 'REJECTED').length;
-  const activeQueueCount = bookings.filter(b => ['ARRIVED', 'WAITING', 'CALLED', 'PROCESSING'].includes(b.status)).length;
-  const totalVolume = bookings.reduce((sum, b) => sum + b.quantity, 0);
+  const activeStatuses = ['ARRIVED', 'WAITING', 'CALLED', 'PROCESSING'];
+  const completedCount = bookings.filter(b => b.status === 'COMPLETED').length;
+  const pendingCount = bookings.filter(b => !['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(b.status)).length;
+  const activeQueueCount = bookings.filter(b => activeStatuses.includes(b.status)).length;
+  const totalVolume = bookings
+    .filter(b => b.status !== 'CANCELLED')
+    .reduce((sum, b) => sum + b.quantity, 0);
+
+  const bookedTons = focusCenter?.todayBookedQuantity ?? 0;
+  const dailyCapacity = focusCenter?.dailyCapacity ?? 1000;
+  const utilizationPercent = dailyCapacity > 0 ? Math.round((bookedTons / dailyCapacity) * 100) : 0;
+  const activeCounters = focusCenter?.activeCounters ?? 4;
+
+  const bottleneckLabel =
+    utilizationPercent >= 90 ? 'CRITICAL LOAD' : utilizationPercent >= 70 ? 'HIGH LOAD' : 'MODERATE LOAD';
+  const bottleneckNote =
+    utilizationPercent >= 90
+      ? `Capacity is nearly exhausted (${utilizationPercent}%). Open more counters or stop accepting new arrivals.`
+      : utilizationPercent >= 70
+        ? `Utilization at ${utilizationPercent}%. Monitor closely through the afternoon peak.`
+        : `Throughput is healthy at ${utilizationPercent}% utilization with ${activeCounters} counters operational.`;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 pt-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
@@ -77,7 +105,7 @@ export const OfficialDashboard: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded border border-amber-300">
-              Mandya Center Command Portal
+              {focusCenter ? `${focusCenter.district} Center Command Portal` : 'Command Portal'}
             </span>
             <span className="text-xs text-slate-500 font-medium">Official ID: OFF-9082</span>
           </div>
@@ -95,45 +123,39 @@ export const OfficialDashboard: React.FC = () => {
       </div>
 
       {msg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl animate-bounce">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl">
           {msg}
         </div>
       )}
 
       {/* Summary Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Today's Expected Farmers" value="128" subtitle="Registered appointments" icon={Users} color="blue" />
-        <StatCard title="Expected Produce Volume" value={`${totalVolume} Tons`} subtitle="Daily capacity: 1000 Tons" icon={Scale} color="amber" />
-        <StatCard title="Completed Procurements" value={completedCount || 81} subtitle="Payout completed" icon={CheckCircle2} color="green" />
-        <StatCard title="Current Live Queue" value={activeQueueCount || 18} subtitle="Waiting at gate & counters" icon={QrCode} color="purple" />
+        <StatCard title="Today's Appointments" value={bookings.length} subtitle="Registered procurement slots" icon={Users} color="blue" />
+        <StatCard title="Expected Produce Volume" value={`${Math.round(totalVolume)} Tons`} subtitle={`Network capacity: ${centers.reduce((s, c) => s + c.dailyCapacity, 0)} Tons`} icon={Scale} color="amber" />
+        <StatCard title="Completed Procurements" value={completedCount} subtitle="Payout completed" icon={CheckCircle2} color="green" />
+        <StatCard title="Current Live Queue" value={activeQueueCount} subtitle={`${pendingCount} still pending`} icon={QrCode} color="purple" />
       </div>
 
       {/* Capacity & Bottleneck Detector Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-xl border border-slate-200 space-y-4">
-          <h3 className="font-extrabold text-base text-slate-900">Mandya Center Capacity Monitor</h3>
-          <CapacityBar booked={820} total={1000} unit="Tons" />
+          <h3 className="font-extrabold text-base text-slate-900">
+            {focusCenter ? `${focusCenter.name} Capacity Monitor` : 'Center Capacity Monitor'}
+          </h3>
+          <CapacityBar booked={bookedTons} total={dailyCapacity} unit="Tons" />
 
           {/* Active Counters Operational Status */}
           <div className="pt-2">
-            <p className="text-xs font-bold text-slate-700 mb-2">Counter Operational Status:</p>
+            <p className="text-xs font-bold text-slate-700 mb-2">
+              Counter Operational Status ({activeCounters} active):
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-              <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
-                <span className="text-[10px] font-bold text-emerald-800 uppercase block">Counter 1</span>
-                <span className="font-extrabold text-slate-900 mt-0.5 block">Serving KPC-034</span>
-              </div>
-              <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
-                <span className="text-[10px] font-bold text-emerald-800 uppercase block">Counter 2</span>
-                <span className="font-extrabold text-slate-900 mt-0.5 block">Serving KPC-035</span>
-              </div>
-              <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
-                <span className="text-[10px] font-bold text-emerald-800 uppercase block">Counter 3</span>
-                <span className="font-extrabold text-slate-900 mt-0.5 block">Serving KPC-036</span>
-              </div>
-              <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
-                <span className="text-[10px] font-bold text-emerald-800 uppercase block">Counter 4</span>
-                <span className="font-extrabold text-slate-900 mt-0.5 block">Serving KPC-041</span>
-              </div>
+              {Array.from({ length: Math.max(1, Math.min(6, activeCounters)) }).map((_, i) => (
+                <div key={i} className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
+                  <span className="text-[10px] font-bold text-emerald-800 uppercase block">Counter {i + 1}</span>
+                  <span className="font-extrabold text-slate-900 mt-0.5 block">Operational</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -144,14 +166,14 @@ export const OfficialDashboard: React.FC = () => {
             <div className="flex items-center gap-2 text-amber-400 font-extrabold text-xs uppercase tracking-wider">
               <AlertTriangle className="w-4 h-4" /> Bottleneck Risk Engine
             </div>
-            <h3 className="text-xl font-extrabold text-white mt-2">MODERATE LOAD</h3>
-            <p className="text-xs text-slate-300 mt-1">
-              Throughput is optimal. 4 counters operational. Expected arrival surge at 11:30 AM is within threshold.
-            </p>
+            <h3 className="text-xl font-extrabold text-white mt-2">{bottleneckLabel}</h3>
+            <p className="text-xs text-slate-300 mt-1">{bottleneckNote}</p>
           </div>
 
           <div className="mt-4 pt-4 border-t border-slate-800 text-[11px] text-emerald-300">
-            ✓ Recommended: Maintain 4 counters to sustain average 7.5 min turnaround.
+            ✓ {activeCounters >= 4
+              ? `Recommended: Maintain ${activeCounters} counters to sustain throughput.`
+              : `Recommended: Open ${4 - activeCounters} more counter(s) to reach optimal 7.5 min turnaround.`}
           </div>
         </div>
       </div>
@@ -161,16 +183,16 @@ export const OfficialDashboard: React.FC = () => {
         <h3 className="font-extrabold text-sm text-slate-900 mb-3 flex items-center gap-2">
           <QrCode className="w-4 h-4 text-forest-700" /> Token Verification & Gate Arrival Verification
         </h3>
-        <div className="flex gap-3 max-w-md">
+        <div className="flex flex-col sm:flex-row gap-3 max-w-md">
           <input
             type="text"
             value={verifyToken}
-            onChange={(e) => setVerifyToken(e.target.value)}
+            onChange={(e) => setVerifyToken(e.target.value.toUpperCase())}
             placeholder="Enter token e.g. KPC-041"
             className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:outline-none focus:border-forest-600"
           />
           <button
-            onClick={() => handleVerifyArrival(verifyToken)}
+            onClick={() => verifyToken.trim() && handleVerifyArrival(verifyToken.trim())}
             className="px-5 py-2.5 bg-forest-900 hover:bg-forest-800 text-white font-extrabold text-xs rounded-xl shadow transition"
           >
             Verify & Mark Arrival
@@ -191,6 +213,7 @@ export const OfficialDashboard: React.FC = () => {
               <tr>
                 <th className="p-4">Token</th>
                 <th className="p-4">Farmer</th>
+                <th className="p-4">Center</th>
                 <th className="p-4">Produce</th>
                 <th className="p-4">Quantity</th>
                 <th className="p-4">Slot</th>
@@ -199,18 +222,32 @@ export const OfficialDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+              {bookings.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                    No bookings found.
+                  </td>
+                </tr>
+              )}
               {bookings.map((b) => (
                 <tr key={b.id} className="hover:bg-slate-50/80 transition">
                   <td className="p-4 font-extrabold font-mono text-amber-700">{b.tokenNumber}</td>
-                  <td className="p-4 font-bold">{b.farmer.user.name}</td>
-                  <td className="p-4">{b.produce.name}</td>
+                  <td className="p-4 font-bold">
+                    {b.farmer?.user?.name || 'Unknown Farmer'}
+                    <span className="block text-[10px] font-medium text-slate-400 font-mono">
+                      {b.farmer?.farmerCode}
+                    </span>
+                  </td>
+                  <td className="p-4 text-slate-600">{b.center?.name}</td>
+                  <td className="p-4">{b.produce?.name}</td>
                   <td className="p-4 font-bold">{b.quantity} Tons</td>
-                  <td className="p-4">{b.slot.startTime}</td>
+                  <td className="p-4">{b.slot?.startTime}</td>
                   <td className="p-4">
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
                       b.status === 'ARRIVED' ? 'bg-blue-100 text-blue-800' :
                       b.status === 'CALLED' ? 'bg-amber-100 text-amber-900 animate-pulse' :
-                      b.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                      b.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                      b.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'
                     }`}>
                       {b.status}
                     </span>
@@ -232,9 +269,9 @@ export const OfficialDashboard: React.FC = () => {
                         Call to Counter
                       </button>
                     )}
-                    {b.procurement && (
+                    {b.procurement && b.status !== 'CANCELLED' && (
                       <button
-                        onClick={() => setActiveModalProc(b.procurement!)}
+                        onClick={() => setActiveModalProc({ ...b.procurement!, booking: b })}
                         className="px-3 py-1 bg-forest-900 hover:bg-forest-800 text-white font-bold text-[11px] rounded-lg shadow"
                       >
                         Inspection & Payout

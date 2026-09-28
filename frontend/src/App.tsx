@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import { FarmerDashboard } from './pages/FarmerDashboard';
@@ -26,82 +27,84 @@ export const AppContent: React.FC = () => {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <Navbar />
       <main className="flex-1">
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
 
-          {/* Farmer Routes */}
-          <Route
-            path="/farmer-dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['FARMER', 'OFFICIAL', 'ADMIN']}>
-                <FarmerDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/centers"
-            element={
-              <ProtectedRoute>
-                <CenterDiscovery />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/book"
-            element={
-              <ProtectedRoute allowedRoles={['FARMER', 'OFFICIAL', 'ADMIN']}>
-                <BookingWizard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/queue/:token"
-            element={
-              <ProtectedRoute>
-                <QueueView />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/procurement-timeline"
-            element={
-              <ProtectedRoute>
-                <ProcurementTimelinePage />
-              </ProtectedRoute>
-            }
-          />
+            {/* Farmer Routes */}
+            <Route
+              path="/farmer-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['FARMER', 'OFFICIAL', 'ADMIN']}>
+                  <FarmerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/centers"
+              element={
+                <ProtectedRoute>
+                  <CenterDiscovery />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/book"
+              element={
+                <ProtectedRoute allowedRoles={['FARMER', 'OFFICIAL', 'ADMIN']}>
+                  <BookingWizard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/queue/:token"
+              element={
+                <ProtectedRoute>
+                  <QueueView />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/procurement-timeline"
+              element={
+                <ProtectedRoute>
+                  <ProcurementTimelinePage />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Official Routes */}
-          <Route
-            path="/official-dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['OFFICIAL', 'ADMIN', 'FARMER']}>
-                <OfficialDashboard />
-              </ProtectedRoute>
-            }
-          />
+            {/* Official Routes */}
+            <Route
+              path="/official-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['OFFICIAL', 'ADMIN', 'FARMER']}>
+                  <OfficialDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Admin Routes */}
-          <Route
-            path="/admin-dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['ADMIN', 'OFFICIAL', 'FARMER']}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/analytics"
-            element={
-              <ProtectedRoute>
-                <AnalyticsPage />
-              </ProtectedRoute>
-            }
-          />
+            {/* Admin Routes */}
+            <Route
+              path="/admin-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN', 'OFFICIAL', 'FARMER']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute>
+                  <AnalyticsPage />
+                </ProtectedRoute>
+              }
+            />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );
@@ -111,7 +114,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppContent />
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   );

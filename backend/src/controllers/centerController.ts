@@ -17,11 +17,13 @@ export async function getCenters(req: Request, res: Response) {
     const enrichedCenters = await Promise.all(
       centers.map(async (center) => {
         const todayStr = new Date().toISOString().split('T')[0];
-        const schedule = await prisma.procurementSchedule.findFirst({
+        const schedules = await prisma.procurementSchedule.findMany({
           where: { centerId: center.id, date: todayStr },
+          select: { bookedQuantity: true },
         });
 
-        const bookedQuantity = schedule?.bookedQuantity || 0;
+        // Sum across every crop scheduled today for this center
+        const bookedQuantity = schedules.reduce((sum, s) => sum + s.bookedQuantity, 0);
         const remainingCapacity = Math.max(0, center.dailyCapacity - bookedQuantity);
 
         const currentQueue = await prisma.queueEntry.count({
@@ -31,12 +33,22 @@ export async function getCenters(req: Request, res: Response) {
           },
         });
 
+        const activeBookings = await prisma.booking.count({
+          where: {
+            centerId: center.id,
+            status: { notIn: [BookingStatus.CANCELLED, BookingStatus.NO_SHOW] },
+          },
+        });
+
         return {
           ...center,
-          todayBookedQuantity: bookedQuantity,
-          remainingCapacity,
-          capacityUtilizationPercent: Math.round((bookedQuantity / center.dailyCapacity) * 100),
+          todayBookedQuantity: Math.round(bookedQuantity * 10) / 10,
+          remainingCapacity: Math.round(remainingCapacity * 10) / 10,
+          capacityUtilizationPercent: center.dailyCapacity > 0
+            ? Math.round((bookedQuantity / center.dailyCapacity) * 100)
+            : 0,
           currentQueue,
+          totalBookings: activeBookings,
           avgProcessingSpeedMinutes: 7.5,
         };
       })
@@ -58,7 +70,10 @@ export async function getCenterById(req: Request, res: Response) {
       where: { id },
       include: {
         centerProduces: { include: { produce: true } },
-        schedules: { include: { slots: true } },
+        schedules: {
+          include: { slots: true, produce: true },
+          orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+        },
       },
     });
 
@@ -73,11 +88,17 @@ export async function getCenterById(req: Request, res: Response) {
       },
     });
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const bookingDates = Array.from(
+      new Set(center.schedules.map((s) => s.date).filter((d) => d >= todayStr))
+    ).sort();
+
     return res.json({
       success: true,
       data: {
         ...center,
         currentQueue,
+        bookingDates,
       },
     });
   } catch (err: any) {

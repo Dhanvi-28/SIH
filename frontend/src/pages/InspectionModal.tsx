@@ -28,6 +28,7 @@ export const InspectionModal: React.FC<InspectionModalProps> = ({ procurement, o
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
+  const [paymentId, setPaymentId] = useState<string | null>(procurement.payment?.id || null);
 
   const handleInspection = async (result: 'ACCEPT' | 'REJECT') => {
     setLoading(true);
@@ -68,6 +69,12 @@ export const InspectionModal: React.FC<InspectionModalProps> = ({ procurement, o
       });
 
       if (res.data.success) {
+        // The payout record is created server-side during weighing; fetch its id so
+        // the payment step works without forcing the official to close and reopen.
+        const pRes = await api.get(`/procurements/${procurement.id}`);
+        if (pRes.data.success && pRes.data.data.payment?.id) {
+          setPaymentId(pRes.data.data.payment.id);
+        }
         setMsg(res.data.message);
         setActiveTab('pay');
       }
@@ -79,15 +86,15 @@ export const InspectionModal: React.FC<InspectionModalProps> = ({ procurement, o
   };
 
   const handleProcessPayment = async () => {
-    if (!procurement.payment) {
-      setError('Payment payout record not ready');
+    if (!paymentId) {
+      setError('Payment payout record not ready. Record the weighing first.');
       return;
     }
 
     setLoading(true);
     setError('');
     try {
-      const res = await api.post(`/payments/${procurement.payment.id}/process`, {});
+      const res = await api.post(`/payments/${paymentId}/process`, {});
       if (res.data.success) {
         setMsg(res.data.message);
         setTimeout(() => { onSuccess(); onClose(); }, 1500);
@@ -99,9 +106,12 @@ export const InspectionModal: React.FC<InspectionModalProps> = ({ procurement, o
     }
   };
 
-  const rate = procurement.booking?.produce.baseRatePerUnit || 2300;
+  const rate = procurement.booking?.produce?.baseRatePerUnit || 2300;
+  const deductions = Math.round(actualQuantity * 10);
   const gross = actualQuantity * rate;
-  const net = gross - 140;
+  const net = gross - deductions;
+  const farmerName = procurement.booking?.farmer?.user?.name || 'Farmer';
+  const produceName = procurement.booking?.produce?.name || 'Produce';
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -115,7 +125,7 @@ export const InspectionModal: React.FC<InspectionModalProps> = ({ procurement, o
             {procurement.booking?.tokenNumber}
           </span>
           <h3 className="font-extrabold text-base text-slate-900">
-            {procurement.booking?.farmer.user.name} ({procurement.booking?.produce.name})
+            {farmerName} ({produceName})
           </h3>
         </div>
 
@@ -271,7 +281,7 @@ export const InspectionModal: React.FC<InspectionModalProps> = ({ procurement, o
               <p className="text-slate-700">Accepted Weight: <strong className="text-slate-900">{actualQuantity} Tons</strong></p>
               <p className="text-slate-700">Government MSP Rate: <strong className="text-slate-900">₹{rate} / Ton</strong></p>
               <p className="text-slate-700">Gross Amount: <strong className="text-slate-900">₹{gross.toLocaleString('en-IN')}</strong></p>
-              <p className="text-slate-600">Handling Fee Deductions: ₹140</p>
+              <p className="text-slate-700">Handling Fee Deductions: ₹{deductions.toLocaleString('en-IN')}</p>
               <p className="text-base font-black text-emerald-800 pt-1 border-t border-emerald-200">
                 Net Farmer Payout: ₹{net.toLocaleString('en-IN')}
               </p>
@@ -279,8 +289,8 @@ export const InspectionModal: React.FC<InspectionModalProps> = ({ procurement, o
 
             <button
               onClick={handleProcessPayment}
-              disabled={loading}
-              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-forest-600 hover:from-emerald-500 text-white font-extrabold rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm"
+              disabled={loading || !paymentId}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-forest-600 hover:from-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <IndianRupee className="w-5 h-5" /> Trigger Direct Bank Payout
             </button>

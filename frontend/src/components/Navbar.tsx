@@ -3,13 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Sprout, Bell, User as UserIcon, LogOut, Shield, LayoutDashboard, QrCode, Building2, BarChart2, CheckCircle, RefreshCw } from 'lucide-react';
 import api from '../services/api';
-import { AppNotification } from '../types';
+import { AppNotification, Booking } from '../types';
 
 export const Navbar: React.FC = () => {
   const { user, logout, quickLogin } = useAuth();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [activeToken, setActiveToken] = useState<string>('');
 
   useEffect(() => {
     if (user) {
@@ -17,6 +18,27 @@ export const Navbar: React.FC = () => {
       const interval = setInterval(fetchNotifications, 15000);
       return () => clearInterval(interval);
     }
+  }, [user]);
+
+  // Resolve the farmer's own latest token so the nav link never points at a
+  // hardcoded / stale token.
+  useEffect(() => {
+    if (!user) {
+      setActiveToken('');
+      return;
+    }
+    let cancelled = false;
+    api.get('/bookings')
+      .then((res) => {
+        if (cancelled || !res.data.success) return;
+        const active = (res.data.data as Booking[]).find(
+          (b) => !['CANCELLED', 'NO_SHOW', 'COMPLETED'].includes(b.status)
+        );
+        const latest = active || res.data.data[0];
+        if (latest) setActiveToken(latest.tokenNumber);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [user]);
 
   const fetchNotifications = async () => {
@@ -68,8 +90,12 @@ export const Navbar: React.FC = () => {
                   <Link to="/centers" className="px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-100 hover:bg-forest-800 transition flex items-center gap-1.5">
                     <Building2 className="w-3.5 h-3.5" /> Book Slot
                   </Link>
-                  <Link to="/queue/KPC-041" className="px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-100 hover:bg-forest-800 transition flex items-center gap-1.5">
-                    <QrCode className="w-3.5 h-3.5" /> Token & Live Queue
+                  <Link
+                    to={activeToken ? `/queue/${activeToken}` : '/procurement-timeline'}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-100 hover:bg-forest-800 transition flex items-center gap-1.5"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    {activeToken ? `Token ${activeToken}` : 'Token & Live Queue'}
                   </Link>
                   <Link to="/procurement-timeline" className="px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-100 hover:bg-forest-800 transition flex items-center gap-1.5">
                     <CheckCircle className="w-3.5 h-3.5" /> Procurement Status

@@ -25,14 +25,23 @@ export const FarmerDashboard: React.FC = () => {
   const fetchFarmerData = async () => {
     try {
       const res = await api.get('/bookings');
-      if (res.data.success && res.data.data.length > 0) {
-        const primary = res.data.data[0];
+      if (res.data.success) {
+        const all: Booking[] = res.data.data;
+        // Prefer the newest booking that is still live, otherwise the newest overall
+        const live = all.filter(b => !['CANCELLED', 'NO_SHOW'].includes(b.status));
+        const primary = live[0] || all[0] || null;
+
         setActiveBooking(primary);
 
-        // Fetch Live Queue details for token
-        const qRes = await api.get(`/queue/${primary.tokenNumber}`);
-        if (qRes.data.success) {
-          setQueueStatus(qRes.data.data);
+        if (primary) {
+          const qRes = await api.get(`/queue/${primary.tokenNumber}`);
+          if (qRes.data.success) {
+            setQueueStatus(qRes.data.data);
+          } else {
+            setQueueStatus(null);
+          }
+        } else {
+          setQueueStatus(null);
         }
       }
     } catch (err) {
@@ -100,28 +109,28 @@ export const FarmerDashboard: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
                 title="Your Queue Position"
-                value={`#${queueStatus?.queuePosition || 7}`}
+                value={queueStatus ? `#${queueStatus.queuePosition}` : '—'}
                 subtitle="Live status in center"
                 icon={QrCode}
                 color="green"
               />
               <StatCard
                 title="Farmers Ahead"
-                value={queueStatus?.farmersAhead ?? 6}
+                value={queueStatus?.farmersAhead ?? '—'}
                 subtitle="Waiting before you"
                 icon={Users}
                 color="amber"
               />
               <StatCard
                 title="AI Estimated Wait"
-                value={`${queueStatus?.estimatedWaitMinutes || 42} min`}
-                subtitle={`Range: ${queueStatus?.minMinutes || 35}-${queueStatus?.maxMinutes || 50} min`}
+                value={queueStatus ? `${queueStatus.estimatedWaitMinutes} min` : '—'}
+                subtitle={queueStatus ? `Range: ${queueStatus.minMinutes}-${queueStatus.maxMinutes} min` : 'Awaiting queue data'}
                 icon={Clock}
                 color="purple"
               />
               <StatCard
                 title="Active Counters"
-                value={`${queueStatus?.activeCounters || 4} / 4`}
+                value={queueStatus ? `${queueStatus.activeCounters}` : '—'}
                 subtitle="Counters operational"
                 icon={Building2}
                 color="blue"
@@ -129,19 +138,16 @@ export const FarmerDashboard: React.FC = () => {
             </div>
 
             {/* AI Prediction & Factor Breakdown Card */}
-            <AIWaitCard
-              estimatedWaitMinutes={queueStatus?.estimatedWaitMinutes || 42}
-              minMinutes={queueStatus?.minMinutes || 35}
-              maxMinutes={queueStatus?.maxMinutes || 50}
-              confidence={queueStatus?.confidence || 0.84}
-              factors={queueStatus?.factors || [
-                { name: 'Farmers Ahead (6)', impact: 'high' },
-                { name: 'Active Counters (4)', impact: 'medium' },
-                { name: 'Processing Speed (7.5 min)', impact: 'medium' },
-                { name: 'Queue Load (High)', impact: 'high' },
-              ]}
-              activeCounters={queueStatus?.activeCounters || 4}
-            />
+            {queueStatus && (
+              <AIWaitCard
+                estimatedWaitMinutes={queueStatus.estimatedWaitMinutes}
+                minMinutes={queueStatus.minMinutes}
+                maxMinutes={queueStatus.maxMinutes}
+                confidence={queueStatus.confidence}
+                factors={queueStatus.factors || []}
+                activeCounters={queueStatus.activeCounters}
+              />
+            )}
 
             {/* Procurement Status Vertical Timeline */}
             <ProcurementTimeline procurement={activeBooking.procurement} />

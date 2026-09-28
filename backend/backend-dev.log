@@ -1,0 +1,40 @@
+
+> optifreight-backend@1.0.0 dev
+> ts-node-dev --respawn --transpile-only src/index.ts
+
+[INFO] 22:03:40 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:07:35 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\bookingController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:07:51 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\bookingController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:08:00 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\bookingController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:08:11 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\bookingController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:08:20 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\services\slotAllocator.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:08:30 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\services\slotAllocator.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:08:41 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\services\slotAllocator.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:09:03 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\demoController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:09:12 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\demoController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:09:21 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\services\queueEngine.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:09:32 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\centerController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:09:43 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\centerController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:09:56 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\routes\queueRoutes.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:10:04 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\routes\demoRoutes.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:10:12 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\routes\procurementRoutes.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:29:54 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\queueController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000
+[INFO] 22:30:02 Restarting: C:\Users\dhanvi\Documents\SIH_2\backend\src\controllers\queueController.ts has been modified
+🚀 OptiFreight Backend running at http://localhost:5000

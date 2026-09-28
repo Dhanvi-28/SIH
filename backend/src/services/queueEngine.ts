@@ -115,7 +115,7 @@ export async function getQueueStatusForToken(tokenNumber: string) {
 
   return {
     booking,
-    nowServingToken: servingEntry?.booking?.tokenNumber || 'KPC-034',
+    nowServingToken: servingEntry?.booking?.tokenNumber || 'Counter Opening',
     farmersAhead,
     queuePosition: booking.queueEntry?.position || 1,
     estimatedWaitMinutes: prediction.predictedMinutes,

@@ -5,12 +5,15 @@ const prisma = new PrismaClient();
 
 export interface SlotRecommendation {
   slotId: string;
+  scheduleId: string;
+  date: string;
   startTime: string;
   endTime: string;
   score: number;
   expectedWaitMinutes: number;
   crowdLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   capacityAvailable: boolean;
+  remainingCapacity: number;
   reasons: string[];
 }
 
@@ -99,19 +102,26 @@ export async function getRecommendedSlots(
     if (expectedWaitMinutes <= 20) reasons.push('✓ Lower expected waiting time');
     if (crowdLevel === 'LOW') reasons.push('✓ Better processing availability');
     if (activeCounters >= 4) reasons.push('✓ Optimal active counter throughput');
+    if (!capacityAvailable) reasons.push('✗ Not enough capacity left for the requested quantity');
 
     recommendations.push({
       slotId: slot.id,
+      scheduleId: schedule.id,
+      date: schedule.date,
       startTime: slot.startTime,
       endTime: slot.endTime,
       score,
       expectedWaitMinutes,
       crowdLevel,
       capacityAvailable,
+      remainingCapacity: Math.max(0, slot.capacity - slot.bookedQuantity),
       reasons,
     });
   }
 
-  // Sort by score descending
-  return recommendations.sort((a, b) => b.score - a.score);
+  // Bookable slots first, then by score descending
+  return recommendations.sort((a, b) => {
+    if (a.capacityAvailable !== b.capacityAvailable) return a.capacityAvailable ? -1 : 1;
+    return b.score - a.score;
+  });
 }

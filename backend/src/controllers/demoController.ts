@@ -27,13 +27,26 @@ export async function advanceQueue(req: Request, res: Response) {
       return res.json({ success: true, message: 'No more farmers in queue to advance' });
     }
 
-    await prisma.queueEntry.updateMany({
+    // Complete only the single farmer currently at a counter (oldest one first)
+    const currentEntry = await prisma.queueEntry.findFirst({
       where: {
         booking: { centerId: targetCenterId },
         status: BookingStatus.PROCESSING,
       },
-      data: { status: BookingStatus.COMPLETED },
+      orderBy: { startedAt: 'asc' },
     });
+
+    if (currentEntry) {
+      await prisma.queueEntry.update({
+        where: { id: currentEntry.id },
+        data: { status: BookingStatus.COMPLETED, completedAt: new Date() },
+      });
+
+      await prisma.booking.update({
+        where: { id: currentEntry.bookingId },
+        data: { status: BookingStatus.COMPLETED },
+      });
+    }
 
     await prisma.booking.update({
       where: { id: nextEntry.bookingId },
@@ -43,6 +56,11 @@ export async function advanceQueue(req: Request, res: Response) {
     await prisma.queueEntry.update({
       where: { id: nextEntry.id },
       data: { status: BookingStatus.CALLED, calledAt: new Date() },
+    });
+
+    await prisma.procurement.updateMany({
+      where: { bookingId: nextEntry.bookingId, status: ProcurementStatus.PENDING },
+      data: { status: ProcurementStatus.ARRIVED, startedAt: new Date() },
     });
 
     await recalculateCenterQueue(targetCenterId);

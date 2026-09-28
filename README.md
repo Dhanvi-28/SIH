@@ -15,7 +15,7 @@ OptiFreight is a full-stack digital platform designed to eliminate long waiting 
 
 ## 🚀 Key Modules & Architecture
 
-1. **BOOK (Farmer Booking)**: 4-step guided booking wizard with produce selection, capacity checking, and instant digital token generation (`KPC-041`).
+1. **BOOK (Farmer Booking)**: 4-step guided booking wizard with produce selection, capacity checking, and instant digital token generation (each new booking gets its own sequential token, e.g. `KPC-042`; the seeded demo token is `KPC-041`).
 2. **AI PREDICT (Waiting-Time Engine)**: Scikit-learn Random Forest regression model predicting waiting times, confidence intervals, and explainable factor impacts based on live queue, volume in tons, active counters, and hourly turnaround.
 3. **ALLOCATE (Smart Slot Allocation)**: Multi-factor scoring algorithm ranking available slots to prevent center overload and bottlenecks.
 4. **PROCURE (Center Workflow Command Center)**: Gate token verification, moisture % inspection, weighbridge recording, accept/reject decision, and direct payment payout trigger.
@@ -124,12 +124,12 @@ npm run dev
 1. Open `http://localhost:5173` in your browser.
 2. Click **"Demo as Farmer Ramesh"** or login with `9876543210` / `farmer123`.
 3. Observe **Token KPC-041** for 24 Tons of Rice at Mandya Central Center.
-4. Click **"Token & Live Queue"** to view position #7, 6 farmers ahead, and AI estimated wait time of 42 mins with confidence and factor analysis.
+4. Click **"Token & Live Queue"** to view position #7, 6 farmers ahead, and the AI estimated wait window (typically ~11-18 mins, ~14 min point estimate) with confidence and factor analysis.
 5. Use the floating **Interactive Demo Control Toolbar** at the bottom:
    - Click **"Official"** role or switch to Official view.
    - Click **"Verify Arrival"** for token `KPC-041`.
    - Click **"Inspection & Payout"** for token `KPC-041`.
    - Fill Moisture (12%), Quality Grade (A), click **"ACCEPT Produce"**.
    - Enter Weight (23.6 Tons), click **"Record Weighing"**.
-   - Click **"Trigger Direct Bank Payout"** to disburse ₹54,000 net payout.
+   - Click **"Trigger Direct Bank Payout"** to disburse the net payout (₹54,044 for 23.6 Tons at the ₹2,300/Ton Rice rate, after the ₹236 handling deduction).
 6. Switch back to **Farmer** view to see the live vertical timeline update to **Payment Completed**!

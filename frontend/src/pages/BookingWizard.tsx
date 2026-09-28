@@ -10,6 +10,9 @@ export const BookingWizard: React.FC = () => {
   const [searchParams] = useSearchParams();
   const preselectedCenterId = searchParams.get('centerId') || '';
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const maxDateStr = new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0];
+
   const [step, setStep] = useState(1);
   const [produces, setProduces] = useState<Produce[]>([]);
   const [centers, setCenters] = useState<ProcurementCenter[]>([]);
@@ -19,7 +22,7 @@ export const BookingWizard: React.FC = () => {
   const [selectedProduceId, setSelectedProduceId] = useState('');
   const [quantity, setQuantity] = useState('24.0');
   const [selectedCenterId, setSelectedCenterId] = useState(preselectedCenterId);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
   const [selectedSlotId, setSelectedSlotId] = useState('');
 
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -56,6 +59,7 @@ export const BookingWizard: React.FC = () => {
   const fetchSlotRecommendations = async () => {
     setLoadingSlots(true);
     setError('');
+    setSelectedSlotId('');
     try {
       const res = await api.get('/slots/recommendations', {
         params: {
@@ -67,9 +71,15 @@ export const BookingWizard: React.FC = () => {
       });
 
       if (res.data.success) {
-        setRecommendations(res.data.data);
-        if (res.data.data.length > 0) {
-          setSelectedSlotId(res.data.data[0].slotId);
+        const recs: SlotRecommendation[] = res.data.data;
+        setRecommendations(recs);
+        // Auto-select the best slot that can actually fit the requested quantity
+        const best = recs.find(r => r.capacityAvailable) || recs[0];
+        if (best) {
+          setSelectedSlotId(best.slotId);
+        }
+        if (recs.length > 0 && !recs.some(r => r.capacityAvailable)) {
+          setError('No slot has enough remaining capacity for this quantity. Please reduce the tons or pick another date.');
         }
       }
     } catch (e: any) {
@@ -89,7 +99,9 @@ export const BookingWizard: React.FC = () => {
   };
 
   const handleConfirmBooking = async () => {
-    if (!selectedSlotId) {
+    const chosen = recommendations.find(r => r.slotId === selectedSlotId);
+
+    if (!chosen) {
       setError('Please select a slot');
       return;
     }
@@ -98,17 +110,11 @@ export const BookingWizard: React.FC = () => {
     setError('');
 
     try {
-      // Find current schedule ID for selected center
-      const center = centers.find(c => c.id === selectedCenterId);
-      const scheduleRes = await api.get(`/centers/${selectedCenterId}`);
-      const schedules = scheduleRes.data.data.schedules || [];
-      const schedule = schedules[0];
-
       const res = await api.post('/bookings', {
         centerId: selectedCenterId,
         produceId: selectedProduceId,
-        scheduleId: schedule?.id || 'schedule-id',
-        slotId: selectedSlotId,
+        scheduleId: chosen.scheduleId,
+        slotId: chosen.slotId,
         quantity: parseFloat(quantity),
       });
 
@@ -118,6 +124,10 @@ export const BookingWizard: React.FC = () => {
       }
     } catch (e: any) {
       setError(e.response?.data?.error?.message || 'Failed to confirm booking');
+      // Capacity may have changed while the farmer was deciding - refresh options
+      if (e.response?.data?.error?.code === 'SLOT_FULL') {
+        fetchSlotRecommendations();
+      }
     } finally {
       setBookingLoading(false);
     }
@@ -247,7 +257,14 @@ export const BookingWizard: React.FC = () => {
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button
-                onClick={() => setStep(3)}
+                onClick={() => {
+                  if (!selectedCenterId) {
+                    setError('Please select a procurement center');
+                    return;
+                  }
+                  setError('');
+                  setStep(3);
+                }}
                 className="flex-2 py-3.5 bg-forest-900 hover:bg-forest-800 text-white font-extrabold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2"
               >
                 Continue to Date <ArrowRight className="w-4 h-4" />
@@ -267,10 +284,15 @@ export const BookingWizard: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 mb-1">Procurement Date</label>
               <input
                 type="date"
+                min={todayStr}
+                max={maxDateStr}
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-forest-600"
               />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Booking window: {todayStr} to {maxDateStr}. Schedules are published for the next 7 days.
+              </p>
             </div>
 
             <div className="flex gap-3">
@@ -305,15 +327,23 @@ export const BookingWizard: React.FC = () => {
             {loadingSlots ? (
               <div className="p-8 text-center text-slate-500">Calculating optimal slot scores...</div>
             ) : recommendations.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-4">No available slots found for this date.</p>
+              <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-2xl">
+                <p className="text-sm font-bold text-slate-700">No slots scheduled on this date</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {selectedCenter?.name} has no {selectedProduce?.name} procurement schedule for {selectedDate}.
+                  Go back and choose another date.
+                </p>
+              </div>
             ) : (
               <div className="space-y-3">
                 {recommendations.map((slot) => (
                   <div
                     key={slot.slotId}
-                    onClick={() => setSelectedSlotId(slot.slotId)}
+                    onClick={() => slot.capacityAvailable && setSelectedSlotId(slot.slotId)}
                     className={`p-5 rounded-2xl border cursor-pointer transition ${
-                      selectedSlotId === slot.slotId
+                      !slot.capacityAvailable
+                        ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                        : selectedSlotId === slot.slotId
                         ? 'border-purple-600 bg-purple-50/70 text-slate-900 ring-2 ring-purple-600 shadow-md'
                         : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
                     }`}
@@ -331,19 +361,32 @@ export const BookingWizard: React.FC = () => {
                           <p className="text-xs text-slate-500 font-medium">
                             Expected Wait: <strong className="text-purple-700">{slot.expectedWaitMinutes} mins</strong> | Crowd: <strong className="text-slate-900">{slot.crowdLevel}</strong>
                           </p>
+                          <p className="text-xs text-slate-500 font-medium">
+                            Capacity left: <strong className={slot.capacityAvailable ? 'text-emerald-700' : 'text-red-600'}>{slot.remainingCapacity} Tons</strong>
+                          </p>
                         </div>
                       </div>
 
-                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full w-fit">
-                        Recommended
+                      <span
+                        className={`text-xs font-bold px-3 py-1 rounded-full w-fit ${
+                          selectedSlotId === slot.slotId
+                            ? 'bg-purple-600 text-white'
+                            : slot.capacityAvailable
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {selectedSlotId === slot.slotId ? 'Selected' : slot.capacityAvailable ? 'Available' : 'Full'}
                       </span>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t border-slate-200/60 text-xs space-y-1">
-                      {slot.reasons.map((r, idx) => (
-                        <p key={idx} className="text-slate-600 font-medium">{r}</p>
-                      ))}
-                    </div>
+                    {slot.reasons.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-200/60 text-xs space-y-1">
+                        {slot.reasons.map((r, idx) => (
+                          <p key={idx} className="text-slate-600 font-medium">{r}</p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -260,8 +260,11 @@ async function main() {
     }
   }
 
-  // 8. Create Schedules and Slots for Today
+  // 8. Create Schedules and Slots
+  // Schedules are generated for EVERY crop at EVERY center for the next 7 days,
+  // so booking always works regardless of which crop or date the farmer picks.
   const todayStr = new Date().toISOString().split('T')[0];
+  const BOOKING_WINDOW_DAYS = 7;
   const timeSlots = [
     { start: '09:00', end: '09:30' },
     { start: '09:30', end: '10:00' },
@@ -277,67 +280,127 @@ async function main() {
     { start: '15:30', end: '16:00' },
   ];
 
-  let todayMandyaScheduleId = '';
-  let targetSlotId = '';
+  interface CreatedSlot {
+    id: string;
+    scheduleId: string;
+    centerId: string;
+    date: string;
+    startTime: string;
+  }
 
-  for (const center of centers) {
-    const schedule = await prisma.procurementSchedule.create({
-      data: {
-        centerId: center.id,
-        produceId: produceRice.id,
-        date: todayStr,
-        startTime: '09:00',
-        endTime: '17:00',
-        capacity: 600.0,
-        bookedQuantity: center.id === centerMandya.id ? 420.0 : 250.0,
-        status: ScheduleStatus.OPEN,
-      },
-    });
+  const mandyaTodayRiceScheduleId = await prisma.procurementSchedule.create({
+    data: {
+      centerId: centerMandya.id,
+      produceId: produceRice.id,
+      date: todayStr,
+      startTime: '09:00',
+      endTime: '17:00',
+      capacity: 600.0,
+      bookedQuantity: 420.0,
+      status: ScheduleStatus.OPEN,
+    },
+  });
 
-    if (center.id === centerMandya.id) {
-      todayMandyaScheduleId = schedule.id;
-    }
+  const allCreatedSlots: CreatedSlot[] = [];
 
-    for (const ts of timeSlots) {
-      const slot = await prisma.slot.create({
-        data: {
-          scheduleId: schedule.id,
-          startTime: ts.start,
-          endTime: ts.end,
-          capacity: 50.0,
-          bookedCount: center.id === centerMandya.id && ts.start === '11:30' ? 7 : 3,
-          bookedQuantity: center.id === centerMandya.id && ts.start === '11:30' ? 45.0 : 20.0,
-          status: 'AVAILABLE',
-        },
-      });
+  for (let dayOffset = 0; dayOffset < BOOKING_WINDOW_DAYS; dayOffset++) {
+    const date = new Date(Date.now() + dayOffset * 86400000).toISOString().split('T')[0];
 
-      if (center.id === centerMandya.id && ts.start === '11:30') {
-        targetSlotId = slot.id;
+    for (const center of centers) {
+      for (let produceIndex = 0; produceIndex < produces.length; produceIndex++) {
+        const produce = produces[produceIndex];
+
+        // Rice carries the bulk of today's demo volume, other crops stay light.
+        const baseVolume = center.id === centerMandya.id ? 420.0 : 250.0;
+        const bookedQuantity =
+          dayOffset === 0
+            ? produceIndex === 0
+              ? baseVolume
+              : Math.round(baseVolume * 0.08)
+            : 0;
+
+        const scheduleId =
+          center.id === centerMandya.id && produceIndex === 0 && dayOffset === 0
+            ? mandyaTodayRiceScheduleId.id
+            : (
+                await prisma.procurementSchedule.create({
+                  data: {
+                    centerId: center.id,
+                    produceId: produce.id,
+                    date,
+                    startTime: '09:00',
+                    endTime: '17:00',
+                    capacity: 600.0,
+                    bookedQuantity,
+                    status: ScheduleStatus.OPEN,
+                  },
+                })
+              ).id;
+
+        for (const ts of timeSlots) {
+          const slot = await prisma.slot.create({
+            data: {
+              scheduleId,
+              startTime: ts.start,
+              endTime: ts.end,
+              capacity: 50.0,
+              bookedCount: 0,
+              bookedQuantity: 0,
+              status: 'AVAILABLE',
+            },
+          });
+
+          allCreatedSlots.push({
+            id: slot.id,
+            scheduleId,
+            centerId: center.id,
+            date,
+            startTime: ts.start,
+          });
+        }
       }
     }
   }
 
-  console.log('✅ Created Schedules & Slots for Today');
+  const todayMandyaScheduleId = mandyaTodayRiceScheduleId.id;
+
+  const findSlot = (startTime: string) => {
+    const found = allCreatedSlots.find(
+      (s) => s.scheduleId === todayMandyaScheduleId && s.startTime === startTime
+    );
+    if (!found) throw new Error(`Seed slot ${startTime} was not created`);
+    return found.id;
+  };
+
+  console.log(`✅ Created ${allCreatedSlots.length} Slots across ${BOOKING_WINDOW_DAYS} days for all crops`);
 
   // 9. Create Active Queue & Bookings for Mandya Center
+  // Tokens are spread across the day; Ramesh (KPC-041) deliberately sits 7th in
+  // the live queue so the demo story (6 farmers ahead) always holds.
   const queueTokens = [
-    { num: 'KPC-034', status: BookingStatus.COMPLETED, pos: 0, wait: 0, farmerIdx: 0, qty: 15.0 },
-    { num: 'KPC-035', status: BookingStatus.PROCESSING, pos: 0, wait: 5, farmerIdx: 1, qty: 18.0 },
-    { num: 'KPC-036', status: BookingStatus.CALLED, pos: 1, wait: 12, farmerIdx: 2, qty: 20.0 },
-    { num: 'KPC-037', status: BookingStatus.ARRIVED, pos: 2, wait: 18, farmerIdx: 3, qty: 14.0 },
-    { num: 'KPC-038', status: BookingStatus.ARRIVED, pos: 3, wait: 24, farmerIdx: 4, qty: 22.0 },
-    { num: 'KPC-039', status: BookingStatus.ARRIVED, pos: 4, wait: 30, farmerIdx: 5, qty: 16.0 },
-    { num: 'KPC-040', status: BookingStatus.ARRIVED, pos: 5, wait: 36, farmerIdx: 6, qty: 25.0 },
+    { num: 'KPC-033', status: BookingStatus.ARRIVED,    wait: 8,  farmerIdx: 7, qty: 17.0, slot: '09:00' },
+    { num: 'KPC-034', status: BookingStatus.COMPLETED,  wait: 0,  farmerIdx: 0, qty: 15.0, slot: '09:00' },
+    { num: 'KPC-035', status: BookingStatus.PROCESSING, wait: 4,  farmerIdx: 1, qty: 18.0, slot: '09:30' },
+    { num: 'KPC-036', status: BookingStatus.CALLED,     wait: 12, farmerIdx: 2, qty: 20.0, slot: '10:00' },
+    { num: 'KPC-037', status: BookingStatus.ARRIVED,    wait: 18, farmerIdx: 3, qty: 14.0, slot: '10:30' },
+    { num: 'KPC-038', status: BookingStatus.ARRIVED,    wait: 24, farmerIdx: 4, qty: 22.0, slot: '11:00' },
+    { num: 'KPC-039', status: BookingStatus.ARRIVED,    wait: 30, farmerIdx: 5, qty: 16.0, slot: '13:00' },
+    { num: 'KPC-040', status: BookingStatus.ARRIVED,    wait: 36, farmerIdx: 6, qty: 25.0, slot: '13:30' },
   ];
 
+  // Tokens arrive in ascending order; KPC-041 is seeded last.
+  let arrivalIndex = 0;
+
   for (const item of queueTokens) {
+    const slotId = findSlot(item.slot);
+
     const booking = await prisma.booking.create({
       data: {
         farmerId: additionalFarmers[item.farmerIdx].id,
         centerId: centerMandya.id,
         produceId: produceRice.id,
         scheduleId: todayMandyaScheduleId,
-        slotId: targetSlotId,
+        slotId,
         quantity: item.qty,
         tokenNumber: item.num,
         status: item.status,
@@ -347,12 +410,14 @@ async function main() {
     await prisma.queueEntry.create({
       data: {
         bookingId: booking.id,
-        position: item.pos,
+        position: arrivalIndex,
         status: item.status,
         estimatedWaitMinutes: item.wait,
-        arrivedAt: new Date(Date.now() - 3600000 + item.pos * 300000),
+        arrivedAt: new Date(Date.now() - 3600000 + arrivalIndex * 300000),
       },
     });
+
+    arrivalIndex++;
 
     if (item.num === 'KPC-034') {
       const proc = await prisma.procurement.create({
@@ -403,28 +468,49 @@ async function main() {
   }
 
   // 10. Ramesh Kumar's Primary Demo Booking (KPC-041)
+  const rameshSlotId = findSlot('11:30');
   const rameshBooking = await prisma.booking.create({
     data: {
       farmerId: farmerUser.farmer!.id,
       centerId: centerMandya.id,
       produceId: produceRice.id,
       scheduleId: todayMandyaScheduleId,
-      slotId: targetSlotId,
+      slotId: rameshSlotId,
       quantity: 24.0,
       tokenNumber: 'KPC-041',
       status: BookingStatus.ARRIVED,
+      procurement: { create: { status: ProcurementStatus.ARRIVED } },
     },
   });
 
+  // 7 farmers ahead -> queue position #7, exactly as documented in the README.
   await prisma.queueEntry.create({
     data: {
       bookingId: rameshBooking.id,
-      position: 6,
+      position: 7,
       status: BookingStatus.ARRIVED,
       estimatedWaitMinutes: 42,
       arrivedAt: new Date(),
     },
   });
+
+  // Keep slot/schedule counters consistent with the demo bookings that were created.
+  const slotUsage = await prisma.booking.groupBy({
+    by: ['slotId'],
+    where: { slotId: { in: allCreatedSlots.map((s) => s.id) } },
+    _count: { _all: true },
+    _sum: { quantity: true },
+  });
+
+  for (const usage of slotUsage) {
+    await prisma.slot.update({
+      where: { id: usage.slotId },
+      data: {
+        bookedCount: usage._count._all,
+        bookedQuantity: usage._sum.quantity || 0,
+      },
+    });
+  }
 
   // Initial Notifications
   await prisma.notification.create({

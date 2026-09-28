@@ -65,12 +65,15 @@ export interface Slot {
 
 export interface SlotRecommendation {
   slotId: string;
+  scheduleId: string;
+  date: string;
   startTime: string;
   endTime: string;
   score: number;
   expectedWaitMinutes: number;
   crowdLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   capacityAvailable: boolean;
+  remainingCapacity: number;
   reasons: string[];
 }
 
@@ -89,10 +92,17 @@ export interface Booking {
   produce: Produce;
   slot: Slot;
   schedule: {
+    id: string;
     date: string;
     startTime: string;
     endTime: string;
   };
+  queueEntry?: {
+    id: string;
+    position: number;
+    status: string;
+    estimatedWaitMinutes: number;
+  } | null;
   farmer: {
     id: string;
     farmerCode: string;
