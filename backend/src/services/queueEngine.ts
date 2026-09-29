@@ -67,6 +67,7 @@ export async function getQueueStatusForToken(tokenNumber: string) {
       center: true,
       produce: true,
       slot: true,
+      schedule: true,
       queueEntry: true,
       procurement: {
         include: {
@@ -91,14 +92,50 @@ export async function getQueueStatusForToken(tokenNumber: string) {
     orderBy: { calledAt: 'desc' },
   });
 
-  const totalInQueue = await prisma.queueEntry.count({
+  // Single source of truth for the live queue.
+  // Stored `position` values can be stale (they are only refreshed on state transitions),
+  // so the same deterministic rule used by recalculateCenterQueue is applied here:
+  // order by arrival time, with any PROCESSING token sitting at the counter (position 0).
+  const liveQueue = await prisma.queueEntry.findMany({
     where: {
       booking: { centerId: booking.centerId },
       status: { in: [BookingStatus.ARRIVED, BookingStatus.WAITING, BookingStatus.CALLED, BookingStatus.PROCESSING] },
     },
+    include: { booking: { select: { id: true, tokenNumber: true, quantity: true } } },
+    orderBy: { arrivedAt: 'asc' },
   });
 
-  const farmersAhead = booking.queueEntry ? Math.max(0, booking.queueEntry.position - 1) : 0;
+  const totalInQueue = liveQueue.length;
+
+  let position = 0;
+  const orderedQueue = liveQueue.map((entry) => ({
+    ...entry,
+    livePosition: entry.status === BookingStatus.PROCESSING ? 0 : ++position,
+  }));
+
+  const myIndex = orderedQueue.findIndex((e) => e.booking.id === booking.id);
+  const myPosition = myIndex === -1 ? 0 : orderedQueue[myIndex].livePosition;
+
+  // Tokens physically at the counters right now.
+  const servingTokens = orderedQueue
+    .filter((e) => e.livePosition === 0 || e.status === BookingStatus.CALLED || e.status === BookingStatus.PROCESSING)
+    .map((e) => ({
+      tokenNumber: e.booking.tokenNumber,
+      status: e.status,
+      position: e.livePosition,
+    }));
+
+  // Real tokens between the counter and this farmer, nearest to the counter first.
+  const aheadTokens = (myIndex === -1 ? [] : orderedQueue.slice(0, myIndex))
+    .filter((e) => e.livePosition > 0)
+    .map((e) => ({
+      tokenNumber: e.booking.tokenNumber,
+      quantity: e.booking.quantity,
+      position: e.livePosition,
+    }));
+
+  // A farmer who has not checked in yet is not in the queue, so nothing is "ahead" of them.
+  const farmersAhead = aheadTokens.length;
 
   const prediction = await predictWaitingTime({
     centerId: booking.centerId,
@@ -117,7 +154,10 @@ export async function getQueueStatusForToken(tokenNumber: string) {
     booking,
     nowServingToken: servingEntry?.booking?.tokenNumber || 'Counter Opening',
     farmersAhead,
-    queuePosition: booking.queueEntry?.position || 1,
+    queuePosition: myIndex === -1 ? (booking.queueEntry?.position ?? 1) : myPosition,
+    servingTokens,
+    aheadTokens,
+    totalInQueue,
     estimatedWaitMinutes: prediction.predictedMinutes,
     minMinutes: prediction.minMinutes,
     maxMinutes: prediction.maxMinutes,

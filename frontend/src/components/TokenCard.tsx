@@ -37,7 +37,7 @@ export const TokenCard: React.FC<{ booking: Booking }> = ({ booking }) => {
             {booking.tokenNumber}
           </h2>
           <p className="text-xs text-emerald-300 mt-1 font-semibold flex items-center justify-center md:justify-start gap-1">
-            <MapPin className="w-3.5 h-3.5" /> {booking.center.name}
+            <MapPin className="w-3.5 h-3.5" /> {booking.center?.name || 'Center'}
           </p>
         </div>
 
@@ -45,15 +45,20 @@ export const TokenCard: React.FC<{ booking: Booking }> = ({ booking }) => {
         <div className="space-y-2.5 text-xs text-slate-300">
           <div className="flex items-center gap-2">
             <Wheat className="w-4 h-4 text-emerald-400" />
-            <span>Produce: <strong className="text-white">{booking.produce.name}</strong> ({booking.quantity} Tons)</span>
+            <span>Produce: <strong className="text-white">{booking.produce?.name || '—'}</strong> ({booking.quantity} Tons)</span>
           </div>
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-emerald-400" />
-            <span>Date: <strong className="text-white">{booking.schedule.date}</strong></span>
+            <span>Date: <strong className="text-white">{booking.schedule?.date || '—'}</strong></span>
           </div>
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-emerald-400" />
-            <span>Slot: <strong className="text-white">{booking.slot.startTime} - {booking.slot.endTime}</strong></span>
+            <span>
+              Slot:{' '}
+              <strong className="text-white">
+                {booking.slot ? `${booking.slot.startTime} - ${booking.slot.endTime}` : '—'}
+              </strong>
+            </span>
           </div>
         </div>
 

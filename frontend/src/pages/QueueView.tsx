@@ -16,6 +16,9 @@ export const QueueView: React.FC = () => {
 
   const tokenNum = token || 'KPC-041';
 
+  // Real tokens ahead of this farmer, as ordered by the backend queue positions.
+  const aheadTokens = queueStatus?.aheadTokens || [];
+
   useEffect(() => {
     fetchQueue();
     const interval = setInterval(fetchQueue, 8000);
@@ -103,7 +106,7 @@ export const QueueView: React.FC = () => {
           {/* Visual Queue Timeline Sequence */}
           <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-200">
             <h3 className="font-extrabold text-sm text-slate-900 mb-4 flex items-center justify-between">
-              <span>Visual Live Queue Sequence (Mandya Center)</span>
+              <span>Visual Live Queue Sequence ({queueStatus.booking.center.name})</span>
               <span className="text-xs font-semibold text-slate-500">Counters: {queueStatus.activeCounters} Active</span>
             </h3>
 
@@ -116,16 +119,26 @@ export const QueueView: React.FC = () => {
 
               <span className="text-slate-400 font-bold">→</span>
 
-              {/* Waiting Farmers in front */}
-              {[...Array(Math.min(5, queueStatus.farmersAhead))].map((_, i) => (
-                <React.Fragment key={i}>
-                  <div className="bg-slate-100 text-slate-700 p-3 rounded-2xl font-bold text-xs shrink-0 border border-slate-200">
-                    <span className="block text-[9px] text-slate-400 font-normal">Wait #{i + 1}</span>
-                    KPC-03{5 + i}
+              {/* Real tokens ahead, straight from the backend queue positions */}
+              {aheadTokens.length > 0 ? (
+                aheadTokens.map((t) => (
+                  <React.Fragment key={t.tokenNumber}>
+                    <div className="bg-slate-100 text-slate-700 p-3 rounded-2xl font-bold text-xs shrink-0 border border-slate-200">
+                      <span className="block text-[9px] text-slate-400 font-normal">Wait #{t.position}</span>
+                      {t.tokenNumber}
+                    </div>
+                    <span className="text-slate-300 font-bold">→</span>
+                  </React.Fragment>
+                ))
+              ) : (
+                <>
+                  <div className="bg-emerald-50 text-emerald-800 p-3 rounded-2xl font-bold text-xs shrink-0 border border-emerald-300">
+                    <span className="block text-[9px] text-emerald-600 font-normal">Next up</span>
+                    No one ahead
                   </div>
                   <span className="text-slate-300 font-bold">→</span>
-                </React.Fragment>
-              ))}
+                </>
+              )}
 
               {/* Your Token */}
               <div className="bg-forest-900 text-amber-400 p-3 rounded-2xl font-black text-sm shrink-0 border-2 border-emerald-500 shadow-lg ring-4 ring-emerald-100">

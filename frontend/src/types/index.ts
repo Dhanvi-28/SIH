@@ -165,11 +165,21 @@ export interface Procurement {
   booking?: Booking;
 }
 
+export interface QueueToken {
+  tokenNumber: string;
+  position: number;
+  status?: string;
+  quantity?: number;
+}
+
 export interface QueueStatus {
   booking: Booking;
   nowServingToken: string;
   farmersAhead: number;
   queuePosition: number;
+  servingTokens?: QueueToken[];
+  aheadTokens?: QueueToken[];
+  totalInQueue?: number;
   estimatedWaitMinutes: number;
   minMinutes: number;
   maxMinutes: number;
